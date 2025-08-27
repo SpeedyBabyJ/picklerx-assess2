@@ -13,15 +13,28 @@ const LINKS: [string, string][]= [
   ["left_eye","right_eye"],
 ];
 
-export default function PoseOverlay({ video, keypoints }:{ video: HTMLVideoElement|null; keypoints: KP[]; }) {
+export default function PoseOverlay({ video, keypoints }:{
+  video: HTMLVideoElement|null; keypoints: KP[];
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
+
   useEffect(() => {
     const c = ref.current; if (!c || !video) return;
     const ctx = c.getContext("2d"); if (!ctx) return;
 
-    c.width = video.videoWidth; c.height = video.videoHeight;
-    ctx.clearRect(0,0,c.width,c.height);
+    // Size canvas to the DISPLAYED video rect (portrait-safe), honoring DPR.
+    const rect = video.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    c.width  = Math.max(1, Math.round(rect.width  * dpr));
+    c.height = Math.max(1, Math.round(rect.height * dpr));
+    c.style.width  = `${rect.width}px`;
+    c.style.height = `${rect.height}px`;
 
+    // Scale drawing so TF coordinates match CSS pixels
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+
+    // Bones
     LINKS.forEach(([a,b])=>{
       const ka = keypoints.find(k => k.name===a && (k.score ?? 1) >= 0.5);
       const kb = keypoints.find(k => k.name===b && (k.score ?? 1) >= 0.5);
@@ -34,6 +47,7 @@ export default function PoseOverlay({ video, keypoints }:{ video: HTMLVideoEleme
       ctx.stroke();
     });
 
+    // Joints
     keypoints.forEach(k=>{
       if ((k.score ?? 1) < 0.5) return;
       ctx.beginPath();
@@ -43,5 +57,5 @@ export default function PoseOverlay({ video, keypoints }:{ video: HTMLVideoEleme
     });
   }, [keypoints, video]);
 
-  return <canvas ref={ref} style={{ position:"absolute", inset:0, pointerEvents:"none" }}/>;
+  return <canvas ref={ref} style={{ position:"absolute", inset:0, pointerEvents:"none" }} />;
 }

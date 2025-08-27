@@ -8,8 +8,8 @@ export async function initMoveNet() {
   try { await tf.setBackend("webgl"); } catch {}
   await tf.ready();
 
-  const cfg = {
-    modelType: "Lightning" as const,
+  const cfg: posedetection.movenet.MoveNetModelConfig = {
+    modelType: posedetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
     enableSmoothing: true,
   };
 
@@ -17,9 +17,11 @@ export async function initMoveNet() {
     posedetection.SupportedModels.MoveNet,
     cfg
   );
+  console.log("[pose] MoveNet ready:", cfg.modelType, "backend:", tf.getBackend());
   return detector;
 }
 
+// flipHorizontal MUST be true when the video is mirrored (front view)
 export async function estimate(video: HTMLVideoElement, flipHorizontal: boolean) {
   if (!detector) return [];
   return detector.estimatePoses(video, { flipHorizontal });

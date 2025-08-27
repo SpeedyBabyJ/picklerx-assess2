@@ -12,25 +12,29 @@ export default function AssessPage() {
   const [videoReady, setVideoReady] = useState(false);
   const [detectorReady, setDetectorReady] = useState(false);
   const [keypoints, setKeypoints] = useState<KP[]>([]);
-  const [view, setView] = useState<"front" | "side">("front");
+  const [view, setView] = useState<"front"|"side">("front"); // <- toggle
 
-  // Caelin filter instance (persist across renders)
+  // temporal smoothing
   const filterRef = useRef(new CaelinFilter({
-    alphaPos: 0.6,         // tune: 0.5–0.8 is a good range
-    alphaScore: 0.5,
-    minScoreConsider: 0.3, // ignore very low-confidence blips
-    fadeOnMiss: 0.92,      // slowly fade through short dropouts
-    maxKeepMiss: 6,        // keep tracks for ~6 frames when missing
+    alphaPos: 0.6, alphaScore: 0.5, minScoreConsider: 0.3, fadeOnMiss: 0.92, maxKeepMiss: 6
   }));
+
+  const isFront = view === "front";
+  const flipForDetector = isFront; // IMPORTANT: flip when mirrored
 
   useEffect(() => {
     let stop = false;
 
     (async () => {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         audio: false,
       });
+
       const v = videoRef.current!;
       v.srcObject = stream;
       await v.play();
@@ -46,16 +50,14 @@ export default function AssessPage() {
       const loop = async () => {
         if (stop) return;
         if (v.readyState >= 2) {
-          const poses = await estimate(v, view === "front");
+          const poses = await estimate(v, flipForDetector);
           const p = poses[0];
 
           if (p?.keypoints?.length) {
-            // map raw -> KP
             const raw: CKP[] = p.keypoints.map((k: any) => ({
               name: k.name ?? k.part ?? "",
               x: k.x, y: k.y, score: k.score
             }));
-            // smooth with Caelin filter
             const smoothed = filterRef.current.apply(raw) as KP[];
             setKeypoints(smoothed);
           } else {
@@ -73,19 +75,26 @@ export default function AssessPage() {
       const s = videoRef.current?.srcObject as MediaStream | null;
       s?.getTracks().forEach(t => t.stop());
     };
-  }, [view]);
+  }, [flipForDetector]); // rewire when view changes
 
   return (
     <div style={{ position:"relative", width:"100%", minHeight:"100vh", background:"black" }}>
-      <div style={{ position:"relative", width:"100%", maxWidth:900, margin:"0 auto" }}>
+      <div style={{
+        position:"relative",
+        width:"100%",
+        maxWidth: 900,
+        margin:"0 auto",
+        aspectRatio: "9 / 16" // play nice in portrait
+      }}>
         <video
           ref={videoRef}
           playsInline
           muted
           style={{
             width:"100%",
-            height:"auto",
-            transform: view === "front" ? "scaleX(-1)" : "none",
+            height:"100%",
+            objectFit:"contain",
+            transform: isFront ? "scaleX(-1)" : "none", // mirror only front view
             borderRadius:12,
             display: videoReady ? "block" : "none",
           }}
