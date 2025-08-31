@@ -96,7 +96,7 @@ export default function JointAngleDisplay({
                   {angle !== null ? `${angle}°` : "---"}
                 </div>
                 
-                {assessmentData && (
+                {assessmentData && status && (
                   <div style={{ 
                     fontSize: "11px", 
                     opacity: 0.8,

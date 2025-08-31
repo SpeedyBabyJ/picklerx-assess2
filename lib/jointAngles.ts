@@ -148,7 +148,7 @@ export function calculateJointAngles(keypoints: KP[]): JointAngles {
  * Assess joint angles against thresholds and return feedback
  */
 export function assessAngles(angles: JointAngles, thresholds: AngleThresholds = DEFAULT_THRESHOLDS): Record<keyof JointAngles, { status: 'optimal' | 'acceptable' | 'needs_improvement'; message: string }> {
-  const assessment: Record<keyof JointAngles, { status: 'optimal' | 'acceptable' | 'needs_improvement'; message: string }> = {} as any;
+  const assessment: Partial<Record<keyof JointAngles, { status: 'optimal' | 'acceptable' | 'needs_improvement'; message: string }>> = {};
 
   Object.keys(angles).forEach((joint) => {
     const key = joint as keyof JointAngles;
@@ -172,5 +172,5 @@ export function assessAngles(angles: JointAngles, thresholds: AngleThresholds = 
     }
   });
 
-  return assessment;
+  return assessment as Record<keyof JointAngles, { status: 'optimal' | 'acceptable' | 'needs_improvement'; message: string }>;
 }

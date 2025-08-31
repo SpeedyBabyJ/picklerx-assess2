@@ -8,8 +8,8 @@ export async function initMoveNet() {
   try { await tf.setBackend("webgl"); } catch {}
   await tf.ready();
 
-  const cfg: posedetection.movenet.MoveNetModelConfig = {
-    modelType: posedetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+  const cfg = {
+    modelType: posedetection.SupportedModels.MoveNet,
     enableSmoothing: true,
   };
 
