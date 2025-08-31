@@ -7,6 +7,7 @@ import { CaelinFilter, type KP as CKP } from "@/lib/caelinFilter";
 import { calculateJointAngles, type JointAngles } from "@/lib/jointAngles";
 import JointAngleDisplay from "@/components/JointAngleDisplay";
 import { computeOHS, type OHSResult } from "@/lib/ohs";
+import { RepDetector } from "@/lib/rep";
 import Results from "@/components/Results";
 
 type KP = { name: string; x: number; y: number; score?: number };
@@ -19,16 +20,32 @@ export default function AssessPage() {
   const [jointAngles, setJointAngles] = useState<JointAngles>({
     ankle: null, knee: null, hip: null, spine: null, shoulder: null, elbow: null, wrist: null
   });
-  const [result, setResult] = useState<OHSResult | null>(null);
+  const [lastResult, setLastResult] = useState<OHSResult | null>(null);
+  const [history, setHistory] = useState<OHSResult[]>([]);
   const [view, setView] = useState<"front"|"side">("front"); // <- toggle
 
   // temporal smoothing
   const filterRef = useRef(new CaelinFilter({
     alphaPos: 0.6, alphaScore: 0.5, minScoreConsider: 0.3, fadeOnMiss: 0.92, maxKeepMiss: 6
   }));
+  
+  // rep detection
+  const rep = useRef(new RepDetector({ window: 6, minDepthPx: 40, eps: 0.25 }));
 
   const isFront = view === "front";
   const flipForDetector = isFront; // IMPORTANT: flip when mirrored
+  
+  // Force PoseOverlay to recompute canvas geometry on resize
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    const handleResize = () => forceUpdate(prev => prev + 1);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
 
   useEffect(() => {
     let stop = false;
@@ -73,27 +90,38 @@ export default function AssessPage() {
             const angles = calculateJointAngles(smoothed);
             setJointAngles(angles);
             
-            // compute results live (you can later gate this per-rep)
-            const r = computeOHS(smoothed);
-            setResult(r);
-
-            // helpful console readout
-            console.table({
-              ankle: r.flags.ankle,
-              knee: r.flags.knee,
-              hip: r.flags.hip,
-              trunk: r.flags.trunk,
-              shoulder: r.flags.shoulder,
-              trunkAngle: r.metrics.trunkAngleFromVertical.toFixed(1),
-              kneeLdx: r.metrics.kneeLeftDX.toFixed(1),
-              kneeRdx: r.metrics.kneeRightDX.toFixed(1)
-            });
+            // Build ySignal for rep detection (hip midpoint Y position)
+            const leftHip = smoothed.find(k => k.name === "left_hip");
+            const rightHip = smoothed.find(k => k.name === "right_hip");
+            if (leftHip && rightHip) {
+              const hipMidY = (leftHip.y + rightHip.y) / 2;
+              const events = rep.current.update(hipMidY, performance.now());
+              
+              // If we detected a rep bottom, compute OHS assessment
+              if (events.some(e => e.type === "bottom")) {
+                const r = computeOHS(smoothed);
+                setLastResult(r);
+                setHistory(h => [r, ...h].slice(0, 5)); // keep last 5 reps
+                
+                // helpful console readout per rep
+                console.table({
+                  ankle: r.flags.ankle,
+                  knee: r.flags.knee,
+                  hip: r.flags.hip,
+                  trunk: r.flags.trunk,
+                  shoulder: r.flags.shoulder,
+                  trunkAngle: r.metrics.trunkAngleFromVertical.toFixed(1),
+                  kneeLdx: r.metrics.kneeLeftDX.toFixed(1),
+                  kneeRdx: r.metrics.kneeRightDX.toFixed(1)
+                });
+              }
+            }
           } else {
             setKeypoints([]);
             setJointAngles({
               ankle: null, knee: null, hip: null, spine: null, shoulder: null, elbow: null, wrist: null
             });
-            setResult(null);
+            setLastResult(null);
           }
         }
         requestAnimationFrame(loop);
@@ -104,6 +132,7 @@ export default function AssessPage() {
     return () => {
       stop = true;
       filterRef.current.reset();
+      rep.current.reset();
       const s = videoRef.current?.srcObject as MediaStream | null;
       s?.getTracks().forEach(t => t.stop());
     };
@@ -151,7 +180,7 @@ export default function AssessPage() {
         <div>Detector: {detectorReady ? "✅ Ready" : "…loading"}</div>
         <div>Keypoints/frame (smoothed): {keypoints.length}</div>
         <div>Joint Angles: {Object.values(jointAngles).some(a => a !== null) ? "✅ Active" : "…waiting"}</div>
-        <div>OHS Assessment: {result ? "✅ Active" : "…waiting"}</div>
+        <div>OHS Assessment: {lastResult ? "✅ Active" : "…waiting"}</div>
         <div style={{ marginTop:8 }}>
           <button onClick={()=>setView(v=> v==="front" ? "side" : "front")}
                   style={{ padding:"6px 10px", borderRadius:8 }}>
@@ -162,7 +191,7 @@ export default function AssessPage() {
       </div>
 
       {/* Results Panel */}
-      <Results result={result} />
+      <Results last={lastResult} history={history} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 type KP = { name: string; x: number; y: number; score?: number };
 
@@ -17,6 +17,18 @@ export default function PoseOverlay({ video, keypoints }:{
   video: HTMLVideoElement|null; keypoints: KP[];
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const [, forceUpdate] = useState(0);
+
+  // Handle resize and orientation changes
+  useEffect(() => {
+    const handleResize = () => forceUpdate(prev => prev + 1);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
 
   useEffect(() => {
     const c = ref.current; if (!c || !video) return;
