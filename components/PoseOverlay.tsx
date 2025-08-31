@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 
 type KP = { name: string; x: number; y: number; score?: number };
 
@@ -13,28 +13,17 @@ const LINKS: [string, string][]= [
   ["left_eye","right_eye"],
 ];
 
-export default function PoseOverlay({ video, keypoints }:{
-  video: HTMLVideoElement|null; keypoints: KP[];
+export default function PoseOverlay({ video, keypoints, frame }:{
+  video: HTMLVideoElement|null; keypoints: KP[]; frame: number;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const [, forceUpdate] = useState(0);
-
-  // Handle resize and orientation changes
-  useEffect(() => {
-    const handleResize = () => forceUpdate(prev => prev + 1);
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
-    };
-  }, []);
 
   useEffect(() => {
     const c = ref.current; if (!c || !video) return;
     const ctx = c.getContext("2d"); if (!ctx) return;
 
     // Size canvas to the DISPLAYED video rect (portrait-safe), honoring DPR.
+    // This must happen every frame to ensure proper overlay positioning
     const rect = video.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     c.width  = Math.max(1, Math.round(rect.width  * dpr));
@@ -67,7 +56,7 @@ export default function PoseOverlay({ video, keypoints }:{
       ctx.fillStyle = "lime";
       ctx.fill();
     });
-  }, [keypoints, video]);
+  }, [keypoints, video, frame]); // Now depends on frame to redraw every frame
 
   return <canvas ref={ref} style={{ position:"absolute", inset:0, pointerEvents:"none" }} />;
 }

@@ -32,6 +32,9 @@ export default function AssessPage() {
   // rep detection
   const rep = useRef(new RepDetector({ window: 6, minDepthPx: 40, eps: 0.25 }));
 
+  // frame counter for PoseOverlay redraws
+  const frameRef = useRef(0);
+
   const isFront = view === "front";
   const flipForDetector = isFront; // IMPORTANT: flip when mirrored
   
@@ -124,6 +127,10 @@ export default function AssessPage() {
             setLastResult(null);
           }
         }
+        
+        // Increment frame counter for PoseOverlay redraws
+        frameRef.current++;
+        
         requestAnimationFrame(loop);
       };
       loop();
@@ -160,7 +167,7 @@ export default function AssessPage() {
             display: videoReady ? "block" : "none",
           }}
         />
-        {videoReady && <PoseOverlay video={videoRef.current} keypoints={keypoints} />}
+        {videoReady && <PoseOverlay video={videoRef.current} keypoints={keypoints} frame={frameRef.current} />}
       </div>
 
       {/* Joint Angle Display */}
