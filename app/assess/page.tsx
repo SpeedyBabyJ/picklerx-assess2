@@ -4,6 +4,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { initMoveNet, estimate } from "@/lib/pose";
 import PoseOverlay from "@/components/PoseOverlay";
 import { CaelinFilter, type KP as CKP } from "@/lib/caelinFilter";
+import { calculateJointAngles, type JointAngles } from "@/lib/jointAngles";
+import JointAngleDisplay from "@/components/JointAngleDisplay";
+import { computeOHSFlags, type OHSFlags } from "@/lib/ohs";
+import ResultsPanel from "@/components/ResultsPanel";
 
 type KP = { name: string; x: number; y: number; score?: number };
 
@@ -12,6 +16,13 @@ export default function AssessPage() {
   const [videoReady, setVideoReady] = useState(false);
   const [detectorReady, setDetectorReady] = useState(false);
   const [keypoints, setKeypoints] = useState<KP[]>([]);
+  const [jointAngles, setJointAngles] = useState<JointAngles>({
+    ankle: null, knee: null, hip: null, spine: null, shoulder: null, elbow: null, wrist: null
+  });
+  const [ohsFlags, setOhsFlags] = useState<OHSFlags>({
+    ankle: "Unknown", knee: "Unknown", hip: "Unknown", trunk: "Unknown", shoulder: "Unknown"
+  });
+  const [showResults, setShowResults] = useState(false);
   const [view, setView] = useState<"front"|"side">("front"); // <- toggle
 
   // temporal smoothing
@@ -60,8 +71,28 @@ export default function AssessPage() {
             }));
             const smoothed = filterRef.current.apply(raw) as KP[];
             setKeypoints(smoothed);
+            
+            // Calculate joint angles
+            const angles = calculateJointAngles(smoothed);
+            setJointAngles(angles);
+            
+            // Calculate OHS assessment flags
+            const flags = computeOHSFlags(smoothed);
+            setOhsFlags(flags);
+            
+            // Show results after we have valid data
+            if (Object.values(flags).some(f => f !== "Unknown")) {
+              setShowResults(true);
+            }
           } else {
             setKeypoints([]);
+            setJointAngles({
+              ankle: null, knee: null, hip: null, spine: null, shoulder: null, elbow: null, wrist: null
+            });
+            setOhsFlags({
+              ankle: "Unknown", knee: "Unknown", hip: "Unknown", trunk: "Unknown", shoulder: "Unknown"
+            });
+            setShowResults(false);
           }
         }
         requestAnimationFrame(loop);
@@ -102,10 +133,24 @@ export default function AssessPage() {
         {videoReady && <PoseOverlay video={videoRef.current} keypoints={keypoints} />}
       </div>
 
+      {/* Joint Angle Display */}
+      {videoReady && detectorReady && (
+        <div style={{ 
+          position: "absolute", 
+          top: "20px", 
+          right: "20px", 
+          zIndex: 10 
+        }}>
+          <JointAngleDisplay angles={jointAngles} />
+        </div>
+      )}
+
       <div style={{ padding:12, color:"white", fontFamily:"system-ui,sans-serif" }}>
         <div>Camera: {videoReady ? "✅ Ready" : "…starting"}</div>
         <div>Detector: {detectorReady ? "✅ Ready" : "…loading"}</div>
         <div>Keypoints/frame (smoothed): {keypoints.length}</div>
+        <div>Joint Angles: {Object.values(jointAngles).some(a => a !== null) ? "✅ Active" : "…waiting"}</div>
+        <div>OHS Assessment: {Object.values(ohsFlags).some(f => f !== "Unknown") ? "✅ Active" : "…waiting"}</div>
         <div style={{ marginTop:8 }}>
           <button onClick={()=>setView(v=> v==="front" ? "side" : "front")}
                   style={{ padding:"6px 10px", borderRadius:8 }}>
@@ -114,6 +159,9 @@ export default function AssessPage() {
           <span style={{ marginLeft:12, opacity:.8 }}>Current: {view}</span>
         </div>
       </div>
+
+      {/* Results Panel */}
+      <ResultsPanel flags={ohsFlags} isVisible={showResults} />
     </div>
   );
 }
